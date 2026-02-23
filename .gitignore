@@ -1,0 +1,63 @@
+# --- OS & IDE Files ---
+.DS_Store
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.history
+.buildlog/
+*.log
+*.swp
+*.class
+
+# --- Flutter/Dart Specific ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+**/doc/api/
+.packages
+
+# --- Android Security & Private Info (BẮT BUỘC ẨN) ---
+**/android/local.properties
+**/android/key.properties
+**/android/app/google-services.json
+**/*.keystore
+**/*.jks
+**/*.p12
+
+# --- iOS Security & Private Info ---
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Runner/GoogleService-Info.plist
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# --- Android Build Artifacts ---
+**/android/app/debug/*
+**/android/app/profile/*
+**/android/app/release/*
+**/android/bundle/*
+**/android/app/build.gradle.kts
+
+# --- Symbolication & Obfuscation ---
+app.*.symbols
+app.*.map.json
+
+# --- CI/CD (Fastlane, etc.) ---
+**/android/fastlane/report.xml
+**/android/fastlane/gc_keys.json
+
+# --- Miscellaneous ---
+.build/
+.swiftpm/
+*.deb
+
+.env
+*.so
+*.dll
+android/app/key.properties
+ios/Runner/Secrets.plist
