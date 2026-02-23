@@ -61,3 +61,4 @@ app.*.map.json
 *.dll
 android/app/key.properties
 ios/Runner/Secrets.plist
+**/src/*
