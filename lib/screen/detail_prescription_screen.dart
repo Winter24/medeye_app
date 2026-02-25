@@ -2,8 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:medeye_app/service/database_service.dart'
-    as db; // Alias để tránh trùng tên class
+import 'package:medeye_app/service/database_service.dart' as db;
 import 'package:medeye_app/service/ai_service.dart';
 import 'package:medeye_app/service/auth_service.dart';
 
@@ -26,11 +25,9 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
   @override
   void initState() {
     super.initState();
-    // Lấy báo cáo đã có từ lịch sử (nếu có)
     _aiAnalysis = widget.prescription.analysisReport;
   }
 
-  /// Gọi SambaNova 70B để phân tích chuyên sâu
   Future<void> _runDeepAnalysis() async {
     setState(() => _isLoading = true);
     try {
@@ -55,15 +52,12 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
           _isLoading = false;
         });
 
-        // Cập nhật kết quả vào Firestore
         final user = AuthService().getCurrentUser();
         if (user != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .collection('prescriptions')
-              .doc(widget.prescription.id)
-              .update({'analysisReport': result});
+          // Sử dụng hàm update từ DatabaseService để đồng bộ
+          await db.DatabaseService(
+            uid: user.uid,
+          ).updateAnalysisReport(widget.prescription.id, result);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -86,11 +80,14 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Kiểm tra đơn có dữ liệu mắt không dựa trên sự tồn tại của trường eyeTest
+    bool hasEyeTest = widget.prescription.eyeTest != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FE),
       appBar: AppBar(
         title: const Text(
-          "Chi tiết đơn thuốc",
+          "Chi tiết kết quả",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
@@ -105,10 +102,17 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
             _buildImageHeader(),
             const SizedBox(height: 24),
             _buildInfoCard(),
-            const SizedBox(height: 24),
-            _buildMedicineList(),
 
-            // HIỂN THỊ BÁO CÁO MỚI
+            if (hasEyeTest) ...[
+              const SizedBox(height: 24),
+              _buildEyeTestSection(),
+            ],
+
+            if (widget.prescription.medicines.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              _buildMedicineList(),
+            ],
+
             if (_aiAnalysis != null && _aiAnalysis!.isNotEmpty)
               _buildFormattedAnalysis(),
 
@@ -131,27 +135,124 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
                     )
                   : const Icon(Icons.auto_awesome, color: Colors.white),
               label: Text(
-                _isLoading ? "Đang phân tích..." : "Phân tích đơn thuốc",
+                _isLoading ? "Đang phân tích..." : "Phân tích chuyên sâu",
               ),
             )
           : null,
     );
   }
 
-  // --- UI COMPONENTS SỬA ĐỔI ---
+  // --- FIX: Hiển thị thông số mắt thực tế từ Database ---
+  Widget _buildEyeTestSection() {
+    final eyeData = widget.prescription.eyeTest!;
+    final rightEye = eyeData['right_eye'] ?? {};
+    final leftEye = eyeData['left_eye'] ?? {};
+    final pd = eyeData['pd']?.toString() ?? "-";
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "👓 Thông số đơn kính",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.grey.shade100),
+          ),
+          child: Column(
+            children: [
+              DataTable(
+                columnSpacing: 15,
+                headingTextStyle: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: kPrimaryColor,
+                ),
+                columns: const [
+                  DataColumn(label: Text('Mắt')),
+                  DataColumn(label: Text('Cầu')),
+                  DataColumn(label: Text('Trụ')),
+                  DataColumn(label: Text('Trục')),
+                ],
+                rows: [
+                  DataRow(
+                    cells: [
+                      const DataCell(
+                        Text(
+                          "Phải (R)",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataCell(Text(rightEye['sph']?.toString() ?? "-")),
+                      DataCell(Text(rightEye['cyl']?.toString() ?? "-")),
+                      DataCell(Text(rightEye['axis']?.toString() ?? "-")),
+                    ],
+                  ),
+                  DataRow(
+                    cells: [
+                      const DataCell(
+                        Text(
+                          "Trái (L)",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataCell(Text(leftEye['sph']?.toString() ?? "-")),
+                      DataCell(Text(leftEye['cyl']?.toString() ?? "-")),
+                      DataCell(Text(leftEye['axis']?.toString() ?? "-")),
+                    ],
+                  ),
+                ],
+              ),
+              const Padding(padding: EdgeInsets.all(16.0), child: Divider()),
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Khoảng cách đồng tử (PD):",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    Text(
+                      "$pd mm",
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: kPrimaryColor,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _buildFormattedAnalysis() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 32),
-        const Text(
-          "🔬 PHÂN TÍCH CHUYÊN SÂU",
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: kPrimaryColor,
-          ),
+        const Row(
+          children: [
+            Icon(Icons.analytics_outlined, color: kPrimaryColor),
+            SizedBox(width: 8),
+            Text(
+              "🔬 PHÂN TÍCH TỪ AI",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: kPrimaryColor,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         _buildWarningBox(),
@@ -180,26 +281,17 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
-              h2: const TextStyle(
-                color: kPrimaryColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
               p: const TextStyle(
                 fontSize: 14,
                 height: 1.6,
                 color: Colors.black87,
               ),
-              listBullet: const TextStyle(color: kPrimaryColor),
-              blockSpacing: 12,
             ),
           ),
         ),
       ],
     );
   }
-
-  // --- CÁC UI GIỮ NGUYÊN HOẶC TINH CHỈNH NHẸ ---
 
   Widget _buildImageHeader() => ClipRRect(
     borderRadius: BorderRadius.circular(20),
@@ -222,7 +314,13 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
     ),
     child: Column(
       children: [
-        _infoRow(Icons.business, "Nơi khám", widget.prescription.hospitalName),
+        _infoRow(
+          Icons.business,
+          "Cơ sở khám bệnh",
+          widget.prescription.hospitalName,
+        ),
+        const Divider(height: 30),
+        _infoRow(Icons.event_note, "Ngày khám", widget.prescription.date),
         const Divider(height: 30),
         _infoRow(
           Icons.medical_information,
@@ -316,7 +414,7 @@ class _DetailPrescriptionScreenState extends State<DetailPrescriptionScreen> {
         SizedBox(width: 8),
         Expanded(
           child: Text(
-            "Tham khảo y khoa chuyên sâu từ AI. Cần tuân thủ chỉ định của bác sĩ.",
+            "Phân tích chỉ mang tính chất tham khảo y khoa. Luôn tuân thủ chỉ định của chuyên gia.",
             style: TextStyle(
               fontSize: 11,
               color: Colors.redAccent,

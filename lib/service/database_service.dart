@@ -12,6 +12,7 @@ class Medicine {
     'quantity': quantity,
     'usage': usage,
   };
+
   factory Medicine.fromMap(Map<String, dynamic> map) => Medicine(
     name: map['name'] ?? '',
     quantity: map['quantity'] ?? '',
@@ -27,7 +28,10 @@ class Prescription {
   final List<Medicine> medicines;
   final String imagePath;
   final DateTime createdAt;
-  final String? analysisReport; // Thêm trường lưu trữ báo cáo
+  final String? analysisReport;
+
+  // --- THÊM TRƯỜNG EYE TEST ĐỂ LƯU THÔNG SỐ MẮT ---
+  final Map<String, dynamic>? eyeTest;
 
   Prescription({
     required this.id,
@@ -37,7 +41,8 @@ class Prescription {
     required this.medicines,
     required this.imagePath,
     required this.createdAt,
-    this.analysisReport, // PHẢI CÓ DÒNG NÀY ĐỂ HẾT LỖI
+    this.analysisReport,
+    this.eyeTest, // Constructor mới nhận thêm eyeTest
   });
 
   Map<String, dynamic> toMap() => {
@@ -48,6 +53,7 @@ class Prescription {
     'imagePath': imagePath,
     'createdAt': createdAt,
     'analysisReport': analysisReport,
+    'eyeTest': eyeTest, // Lưu Map thông số mắt lên Firestore
   };
 
   factory Prescription.fromFirestore(DocumentSnapshot doc) {
@@ -62,7 +68,10 @@ class Prescription {
           .toList(),
       imagePath: data['imagePath'] ?? '',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      analysisReport: data['analysisReport'], // Đọc dữ liệu từ Cache
+      analysisReport: data['analysisReport'],
+      eyeTest:
+          data['eyeTest']
+              as Map<String, dynamic>?, // Đọc dữ liệu mắt từ Firestore
     );
   }
 }
@@ -74,13 +83,25 @@ class DatabaseService {
   final CollectionReference userCollection = FirebaseFirestore.instance
       .collection('users');
 
+  /// Lưu đơn khám (bao gồm cả đơn thuốc và đơn kính)
   Future<void> savePrescription(Prescription p) async {
     if (uid == null) return;
-    // Dùng await để đảm bảo hàm trả về Future<void>
     await userCollection.doc(uid).collection('prescriptions').add(p.toMap());
   }
 
-  // Giữ lại hàm createUserData để không lỗi Register Screen
+  /// Cập nhật báo cáo phân tích AI vào tài liệu đã tồn tại
+  Future<void> updateAnalysisReport(
+    String prescriptionId,
+    String report,
+  ) async {
+    if (uid == null) return;
+    await userCollection
+        .doc(uid)
+        .collection('prescriptions')
+        .doc(prescriptionId)
+        .update({'analysisReport': report});
+  }
+
   Future<void> createUserData(String email, String phone) async {
     if (uid == null) return;
     await userCollection.doc(uid).set({

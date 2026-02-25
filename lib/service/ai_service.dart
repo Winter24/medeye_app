@@ -30,14 +30,35 @@ class SambaService {
     ---
     $rawOcrText
     ---
-    Hãy trích xuất thông tin theo định dạng JSON gồm các trường: 
-    - hospital_name (tên bệnh viện)
-    - date (ngày khám)
-    - diagnose (chẩn đoán)
-    - medicines (danh sách thuốc, mỗi thuốc gồm: brandname, quantity, usage).
+    Hãy trích xuất thông tin theo định dạng JSON. 
+    
+    YÊU CẦU XỬ LÝ:
+    1. Nếu là ĐƠN THUỐC: Trích xuất danh sách 'medicines' (brandname, quantity, usage).
+    2. Nếu là ĐƠN KÍNH: Trích xuất thông tin vào trường 'eye_test' gồm:
+       - 'right_eye' (mắt phải) & 'left_eye' (mắt trái): Mỗi bên gồm {sph: độ cầu, cyl: độ trụ, axis: trục, va: thị lực}.
+       - 'pd' (khoảng cách đồng tử/KCĐT).
+    3. Các trường chung luôn phải có: 
+       - hospital_name (tên bệnh viện/phòng khám)
+       - date (ngày khám)
+       - diagnose (chẩn đoán)
 
-    Nếu từ nào sai chính tả hãy sửa lại cho đúng thuật ngữ y tế. 
-    Lưu ý: Chỉ trả về duy nhất định dạng JSON, không kèm giải thích. Vitamin cũng tính vào medicines 
+    LƯU Ý: 
+    - Nếu là đơn kính, 'diagnose' thường là Tật khúc xạ, Cận thị, hoặc Loạn thị.
+    - Sửa lỗi chính tả thuật ngữ y tế (VD: 'KCĐT' -> 'PD').
+    - Chỉ trả về duy nhất định dạng JSON, không kèm giải thích.
+
+    CẤU TRÚC JSON MẪU:
+    {
+      "hospital_name": "...",
+      "date": "...",
+      "diagnose": "...",
+      "medicines": [],
+      "eye_test": {
+        "right_eye": {"sph": "", "cyl": "", "axis": "", "va": ""},
+        "left_eye": {"sph": "", "cyl": "", "axis": "", "va": ""},
+        "pd": ""
+      }
+    }
     """;
     return await _callSamba(prompt, apiKey, model: _fastModel, isJson: true);
   }
