@@ -6,17 +6,19 @@ import 'package:medeye_app/screen/register_screen.dart';
 import 'package:medeye_app/screen/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:medeye_app/service/ai_service.dart';
-// import 'package:medeye_app/service/prescription_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(); //
+
   try {
-    GeminiService().init();
-    print("✅ Gemini AI đã cấu hình thành công với Native Key");
+    // Gọi hàm init() mà chúng ta vừa thêm vào ai_service.dart
+    SambaService().init();
+    print("✅ Cấu hình AI Service thành công");
   } catch (e) {
-    print("❌ Lỗi khởi tạo Gemini AI: $e");
+    print("❌ Lỗi khởi tạo AI Service: $e");
   }
+
   runApp(const MedEyeApp());
 }
 
@@ -31,7 +33,12 @@ class MedEyeApp extends StatelessWidget {
       theme: ThemeData(
         fontFamily: 'Inter',
         useMaterial3: true,
+        // Màu tím chủ đạo đặc trưng của dự án Medeye
         primaryColor: const Color(0xFFB58BFF),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFFB58BFF),
+          primary: const Color(0xFFB58BFF),
+        ),
       ),
       initialRoute: '/',
       routes: {

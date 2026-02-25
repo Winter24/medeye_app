@@ -1,29 +1,29 @@
 import 'dart:convert';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:http/http.dart' as http;
 import 'native_service.dart';
 
-class GeminiService {
-  static final GeminiService _instance = GeminiService._internal();
-  factory GeminiService() => _instance;
-  GeminiService._internal();
+class SambaService {
+  static final SambaService _instance = SambaService._internal();
+  factory SambaService() => _instance;
+  SambaService._internal();
 
-  late final GenerativeModel _model;
+  // Endpoint chuẩn của SambaNova Cloud
+  final String _baseUrl = "https://api.sambanova.ai/v1/chat/completions";
+
+  // Các model Nghi đã chọn từ danh sách
+  final String _fastModel = "Meta-Llama-3.3-70B-Instruct";
+  final String _smartModel = "Meta-Llama-3.3-70B-Instruct";
 
   void init() {
-    final apiKey = NativeService.getApiKey();
-
-    if (apiKey.length > 5) {
-      print("Debug API Key prefix: ${apiKey}");
-    } else {
-      print("Debug API Key lỗi: $apiKey");
-    }
-
-    _model = GenerativeModel(model: 'gemini-flash-latest', apiKey: apiKey);
+    print("🚀 SambaNova Service đã sẵn sàng.");
   }
 
-  Future<Map<String, dynamic>?> extractPrescriptionData(
+  /// HÀM 1: Trích xuất JSON (Dùng model 8B siêu nhanh)
+  Future<Map<String, dynamic>?> extractPrescriptionJson(
     String rawOcrText,
   ) async {
+    final apiKey = NativeService.getApiKey();
+    print(apiKey);
     final prompt =
         """
     Dưới đây là văn bản OCR từ đơn thuốc:
@@ -39,23 +39,91 @@ class GeminiService {
     Nếu từ nào sai chính tả hãy sửa lại cho đúng thuật ngữ y tế. 
     Lưu ý: Chỉ trả về duy nhất định dạng JSON, không kèm giải thích. Vitamin cũng tính vào medicines 
     """;
+    return await _callSamba(prompt, apiKey, model: _fastModel, isJson: true);
+  }
+
+  /// HÀM 2: Phân tích sâu (Dùng model 70B thông minh)
+  Future<String?> analyzeDeeply(
+    List<dynamic> medicines,
+    String diagnose,
+  ) async {
+    final apiKey = NativeService.getApiKey();
+    final prompt =
+        """
+Bạn là một chuyên gia y tế. Hãy phân tích đơn thuốc:
+- Chẩn đoán: $diagnose
+- Thuốc: ${jsonEncode(medicines)}
+
+YÊU CẦU: Cấu trúc báo cáo theo các Mục 1, 2, 3 dùng dấu #. 
+Cuối bài ghi: "Cảnh báo: Thông tin này chỉ mang tính tham khảo."
+""";
+    final result = await _callSamba(
+      prompt,
+      apiKey,
+      model: _smartModel,
+      isJson: false,
+    );
+    return result as String?;
+  }
+
+  /// HÀM LÕI GỌI API
+  Future<dynamic> _callSamba(
+    String prompt,
+    String apiKey, {
+    required String model,
+    bool isJson = false,
+  }) async {
+    print("📡 [DEBUG] Đang gửi yêu cầu tới SambaNova...");
+    print(
+      "🔑 [DEBUG] API Key sử dụng: ${apiKey.isNotEmpty ? apiKey.substring(0, 5) + "..." : "TRỐNG"}",
+    );
 
     try {
-      final content = [Content.text(prompt)];
-      final response = await _model.generateContent(content);
+      final response = await http
+          .post(
+            Uri.parse(_baseUrl),
+            headers: {
+              "Authorization": "Bearer $apiKey",
+              "Content-Type": "application/json",
+            },
+            body: jsonEncode({
+              "model": model,
+              "messages": [
+                {
+                  "role": "system",
+                  "content":
+                      "You are a medical assistant. Return ONLY JSON if requested.",
+                },
+                {"role": "user", "content": prompt},
+              ],
+              "stream":
+                  false, // SambaNova cần set false để nhận toàn bộ nội dung một lần
+              "temperature": 0.1,
+            }),
+          )
+          .timeout(const Duration(seconds: 20));
 
-      String? text = response.text;
-      if (text == null) return null;
+      print("📬 [DEBUG] Phản hồi Server - Status Code: ${response.statusCode}");
 
-      if (text.contains("```json")) {
-        text = text.split("```json")[1].split("```")[0].trim();
-      } else if (text.contains("```")) {
-        text = text.split("```")[1].split("```")[0].trim();
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        String content = data['choices'][0]['message']['content'];
+
+        if (isJson) {
+          // Bóc tách JSON nếu model trả về trong khối Markdown ```json
+          if (content.contains("```")) {
+            content = content.split("```")[1].replaceFirst("json", "").trim();
+          }
+          return jsonDecode(content);
+        }
+        return content;
+      } else {
+        // Log lỗi chi tiết từ server (Ví dụ: 401 là sai Key)
+        print("❌ [DEBUG] Server báo lỗi: ${response.body}");
+        return null;
       }
-
-      return jsonDecode(text) as Map<String, dynamic>;
     } catch (e) {
-      print("Lỗi Gemini: $e");
+      print("🔥 [DEBUG] Lỗi kết nối hoặc thực thi: $e");
       return null;
     }
   }

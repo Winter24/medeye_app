@@ -22,19 +22,100 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
-  static const List<Widget> _widgetOptions = <Widget>[
-    HomePageContent(),
-    HistoryScreen(),
-    Center(child: Text('Quét giấy khám')),
-    Center(child: Text('Dịch vụ')),
-    AccountScreen(),
-  ];
+  void _goToAccount() {
+    setState(() {
+      _selectedIndex = 4;
+    });
+  }
+
+  // Hàm xử lý đặt nhắc nhở uống thuốc
+  Future<void> _setMedicationReminder() async {
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+      helpText: "CHỌN GIỜ UỐNG THUỐC",
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: kPrimaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedTime != null) {
+      String medicineName = "";
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text("Nhắc nhở uống thuốc"),
+          content: TextField(
+            autofocus: true,
+            onChanged: (value) => medicineName = value,
+            decoration: const InputDecoration(
+              hintText: "Ví dụ: Paracetamol, Vitamin C...",
+              focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: kPrimaryColor),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("HỦY"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryColor),
+              onPressed: () {
+                if (medicineName.trim().isNotEmpty) {
+                  Navigator.pop(context);
+                  _confirmReminder(medicineName, pickedTime);
+                }
+              },
+              child: const Text(
+                "ĐẶT LỊCH",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _confirmReminder(String name, TimeOfDay time) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("✅ Đã đặt nhắc nhở: $name lúc ${time.format(context)}"),
+        backgroundColor: kPrimaryColor,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  List<Widget> _getWidgetOptions() {
+    return [
+      HomePageContent(
+        onReminderTap: _setMedicationReminder,
+        onAvatarTap: _goToAccount,
+      ),
+      const HistoryScreen(),
+      const SizedBox.shrink(), // Vị trí nút Scan (index 2)
+      const ServiceScreen(), // Màn hình Dịch vụ (index 3)
+      const AccountScreen(), // Màn hình Tài khoản (index 4)
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
     Future.delayed(Duration.zero, () {
-      print("Pre-loading AI Models...");
       OnnxPipeline().init();
     });
   }
@@ -46,33 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  String _sanitizeOcrText(String text) {
-    List<String> lines = text.split('\n');
-    List<String> sensitiveKeywords = [
-      'họ tên',
-      'địa chỉ',
-      'địa chi',
-      'số thẻ',
-      'bảo hiểm',
-      'bhyt',
-      'mã số',
-    ];
-
-    return lines
-        .where((line) {
-          String lowerLine = line.toLowerCase();
-          for (var key in sensitiveKeywords) {
-            if (lowerLine.contains(key)) return false;
-          }
-          return true;
-        })
-        .join('\n')
-        .trim();
-  }
-
   Future<void> _scanMedicalBill() async {
     final ImagePicker picker = ImagePicker();
-
     final ImageSource? source = await showDialog<ImageSource>(
       context: context,
       builder: (BuildContext context) {
@@ -106,44 +162,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (source != null) {
       final XFile? imageFile = await picker.pickImage(source: source);
-
-      if (imageFile == null) {
-        print("Không có ảnh nào được chọn");
-        return;
-      }
+      if (imageFile == null) return;
 
       if (!mounted) return;
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: kPrimaryColor),
-              SizedBox(height: 16),
-              Material(
-                color: Colors.transparent,
-                child: Text(
-                  "Đang phân tích đơn thuốc...",
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
+          child: CircularProgressIndicator(color: kPrimaryColor),
         ),
       );
 
       try {
         String extractedText = await OnnxPipeline().runPipeline(imageFile.path);
-
-        String sanitizedText = _sanitizeOcrText(extractedText);
-
-        // 5. Tắt Loading
         if (!mounted) return;
         Navigator.pop(context);
 
-        // 6. Chuyển sang màn hình kết quả
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -154,17 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       } catch (e) {
-        // Xử lý lỗi nếu AI crash
         if (!mounted) return;
-        Navigator.pop(context); // Tắt loading
-
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Lỗi xử lý AI: $e'),
-            backgroundColor: Colors.red,
-          ),
+          SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red),
         );
-        print("AI Error: $e");
       }
     }
   }
@@ -173,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: _widgetOptions.elementAt(_selectedIndex),
+      body: IndexedStack(index: _selectedIndex, children: _getWidgetOptions()),
       floatingActionButton: _buildScanFab(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _buildBottomAppBar(),
@@ -186,9 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
       height: 64,
       child: FloatingActionButton(
         onPressed: _scanMedicalBill,
-        elevation: 4.0,
         backgroundColor: kPrimaryColor,
         shape: const CircleBorder(),
+        elevation: 4,
         child: const Icon(Icons.fullscreen, color: Colors.white, size: 36),
       ),
     );
@@ -213,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             _buildNavItem(
               icon: Icons.assignment_outlined,
-              label: 'LỊCH SỬ KHÁM',
+              label: 'LỊCH SỬ',
               index: 1,
             ),
             const SizedBox(width: 40),
@@ -259,7 +287,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontSize: 10,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -268,9 +295,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- WIDGET FOR THE HOME PAGE CONTENT ---
+// --- TRANG CHỦ CONTENT ---
 class HomePageContent extends StatelessWidget {
-  const HomePageContent({super.key});
+  final VoidCallback onReminderTap;
+  final VoidCallback onAvatarTap;
+
+  const HomePageContent({
+    super.key,
+    required this.onReminderTap,
+    required this.onAvatarTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -302,11 +336,7 @@ class HomePageContent extends StatelessWidget {
           children: [
             Text(
               'Chào buổi sáng',
-              style: TextStyle(
-                color: Colors.black,
-                fontWeight: FontWeight.bold,
-                fontSize: 26,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26),
             ),
             SizedBox(height: 4),
             Text(
@@ -317,33 +347,17 @@ class HomePageContent extends StatelessWidget {
         ),
         Row(
           children: [
-            Stack(
-              alignment: Alignment.topRight,
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.notifications_outlined,
-                    color: kInactiveColor,
-                    size: 30,
-                  ),
-                  onPressed: () {},
-                ),
-                Container(
-                  margin: const EdgeInsets.only(top: 12, right: 12),
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined, size: 30),
+              onPressed: () {},
             ),
-            const SizedBox(width: 8),
-            const CircleAvatar(
-              radius: 22,
-              backgroundColor: kPrimaryLightColor,
-              child: Icon(Icons.person, color: kPrimaryColor, size: 28),
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: const CircleAvatar(
+                radius: 22,
+                backgroundColor: kPrimaryLightColor,
+                child: Icon(Icons.person, color: kPrimaryColor, size: 28),
+              ),
             ),
           ],
         ),
@@ -354,17 +368,19 @@ class HomePageContent extends StatelessWidget {
   Widget _buildGridMenu() {
     return GridView.count(
       crossAxisCount: 3,
-      crossAxisSpacing: 16,
-      mainAxisSpacing: 16,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: [
-        _buildGridItem(icon: Icons.alarm, label: 'NHẮC NHỞ', isSpecial: true),
-        _buildGridItem(),
-        _buildGridItem(),
-        _buildGridItem(),
-        _buildGridItem(),
-        _buildGridItem(),
+        _buildGridItem(
+          icon: Icons.alarm,
+          label: 'NHẮC NHỞ',
+          isSpecial: true,
+          onTap: onReminderTap,
+        ),
+        _buildGridItem(icon: Icons.calendar_today, label: 'LỊCH KHÁM'),
+        _buildGridItem(icon: Icons.more_horiz, label: 'THÊM'),
       ],
     );
   }
@@ -373,34 +389,103 @@ class HomePageContent extends StatelessWidget {
     IconData? icon,
     String? label,
     bool isSpecial = false,
+    VoidCallback? onTap,
   }) {
-    if (isSpecial) {
-      return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
         decoration: BoxDecoration(
-          color: kPrimaryLightColor,
+          color: isSpecial ? kPrimaryLightColor : kGridBackgroundColor,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: kPrimaryColor, size: 40),
+            Icon(
+              icon ?? Icons.help_outline,
+              color: isSpecial ? kPrimaryColor : kInactiveColor,
+              size: 32,
+            ),
             const SizedBox(height: 8),
             Text(
-              label!,
-              style: const TextStyle(
-                color: kPrimaryColor,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+              label ?? "",
+              style: TextStyle(
+                color: isSpecial ? kPrimaryColor : kInactiveColor,
+                fontWeight: isSpecial ? FontWeight.bold : FontWeight.normal,
+                fontSize: 11,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
-      );
-    }
-    return Container(
-      decoration: BoxDecoration(
-        color: kGridBackgroundColor,
-        borderRadius: BorderRadius.circular(16),
+      ),
+    );
+  }
+}
+
+// --- TRANG DỊCH VỤ (Đã sửa lỗi Const) ---
+class ServiceScreen extends StatelessWidget {
+  const ServiceScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          "Dịch vụ y tế",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _buildServiceItem(
+            Icons.local_hospital,
+            "Đặt lịch khám",
+            "Kết nối với bác sĩ nhanh chóng",
+          ),
+          _buildServiceItem(
+            Icons.chat,
+            "Tư vấn bác sĩ",
+            "Giải đáp thắc mắc sức khỏe 24/7",
+          ),
+          _buildServiceItem(
+            Icons.medication,
+            "Mua thuốc online",
+            "Giao thuốc tận nhà trong 2h",
+          ),
+          _buildServiceItem(
+            Icons.search,
+            "Tra cứu bệnh lý",
+            "Thông tin y khoa chính xác",
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceItem(IconData icon, String title, String subtitle) {
+    return Card(
+      elevation: 0,
+      color: kGridBackgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: kPrimaryLightColor,
+          child: Icon(icon, color: kPrimaryColor),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        trailing: const Icon(Icons.chevron_right, color: kInactiveColor),
+        onTap: () {
+          // Xử lý logic khi click vào dịch vụ
+        },
       ),
     );
   }

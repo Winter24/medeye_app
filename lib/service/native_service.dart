@@ -18,9 +18,13 @@ class NativeService {
       final Pointer<Utf8> ptr = getNativeKey();
       final String key = ptr.toDartString();
 
+      // GIẢI PHÓNG BỘ NHỚ C++ TỪ DART
+      // Cần thêm package ffi vào pubspec.yaml nếu chưa có
+      malloc.free(ptr);
+
       return key;
     } catch (e) {
-      print("Lỗi FFI: $e");
+      print("❌ Lỗi FFI: $e");
       return "";
     }
   }
